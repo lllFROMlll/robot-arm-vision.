@@ -32,12 +32,21 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Instala o capturador de erros ANTES de qualquer outra coisa
+        Thread.setDefaultUncaughtExceptionHandler(CrashHandler(applicationContext))
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         previewView = findViewById(R.id.previewView)
         overlayView = findViewById(R.id.overlayView)
         statusText = findViewById(R.id.statusText)
+
+        // Verifica se da última vez o app crashou, e mostra o erro na tela
+        val lastCrash = CrashHandler.readLastCrash(applicationContext)
+        if (lastCrash != null) {
+            statusText.text = "ERRO DA ÚLTIMA VEZ:\n${lastCrash.take(500)}"
+        }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
@@ -54,32 +63,31 @@ class MainActivity : AppCompatActivity() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
         cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-
-            val preview = Preview.Builder()
-                .build()
-                .also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
-                }
-
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-
-            var frameCount = 0
-            imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                frameCount++
-                // TODO (Parte 2): aqui vamos chamar o YoloPoseDetector.detect(imageProxy)
-                runOnUiThread {
-                    statusText.text = "Câmera ativa - frame #$frameCount " +
-                        "(${imageProxy.width}x${imageProxy.height})"
-                }
-                imageProxy.close()
-            }
-
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
             try {
+                val cameraProvider = cameraProviderFuture.get()
+
+                val preview = Preview.Builder()
+                    .build()
+                    .also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+
+                var frameCount = 0
+                imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                    frameCount++
+                    runOnUiThread {
+                        statusText.text = "Câmera ativa - frame #$frameCount " +
+                            "(${imageProxy.width}x${imageProxy.height})"
+                    }
+                    imageProxy.close()
+                }
+
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
                     this, cameraSelector, preview, imageAnalysis
