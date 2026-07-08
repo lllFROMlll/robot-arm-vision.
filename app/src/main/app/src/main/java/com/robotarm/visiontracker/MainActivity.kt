@@ -3,6 +3,7 @@ package com.robotarm.visiontracker
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.Surface
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
@@ -38,7 +39,8 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            startCamera()
+            // Espera a tela estar totalmente pronta antes de iniciar a câmera
+            previewView.post { startCamera() }
         } else {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 10)
         }
@@ -51,25 +53,29 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == 10 && grantResults.isNotEmpty() &&
             grantResults[0] == PackageManager.PERMISSION_GRANTED
         ) {
-            startCamera()
+            previewView.post { startCamera() }
         } else {
             statusText.text = "Permissão de câmera negada."
         }
     }
 
     private fun startCamera() {
+        // Proteção: se por algum motivo a tela ainda não tiver rotação disponível,
+        // usa ROTATION_0 como padrão em vez de quebrar o app.
+        val safeRotation = previewView.display?.rotation ?: Surface.ROTATION_0
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
 
             val preview = Preview.Builder()
-                .setTargetRotation(previewView.display.rotation)
+                .setTargetRotation(safeRotation)
                 .build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
             val analysis = ImageAnalysis.Builder()
-                .setTargetRotation(previewView.display.rotation)
+                .setTargetRotation(safeRotation)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
 
